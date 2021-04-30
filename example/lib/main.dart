@@ -14,7 +14,8 @@ class MyApp extends StatefulWidget {
 }
 
 class _MyAppState extends State<MyApp> {
-  String _pairedDevice = "N/A";
+  String _lastResult = "N/A";
+  PairedDevice pairedDevice;
 
   @override
   void initState() {
@@ -27,6 +28,7 @@ class _MyAppState extends State<MyApp> {
     PairedDevice pairedDevice;
     // Platform messages may fail, so we use a try/catch PlatformException.
     try {
+      // WePlenish.* matches regex for any BT device that begins with WePlenish
       pairedDevice = await FlutterBt.connect(
           new DeviceAttributes(nameRegex: "WePlenish.*"));
     } on PlatformException {
@@ -41,7 +43,9 @@ class _MyAppState extends State<MyApp> {
     if (!mounted) return;
 
     setState(() {
-      _pairedDevice = pairedDevice != null ? pairedDevice.name : "1";
+      _lastResult = pairedDevice != null
+          ? pairedDevice.name
+          : "Ensure Device is BT scanning";
     });
   }
 
@@ -50,22 +54,33 @@ class _MyAppState extends State<MyApp> {
     return MaterialApp(
       home: Scaffold(
         appBar: AppBar(
-          title: const Text('Plugin example app'),
+          title: const Text('Bluetooth companion example'),
         ),
         body: Center(
           child: Column(
             children: [
-              Text('Paired with Device: $_pairedDevice '),
+              Text('Paired with Device: $_lastResult '),
               TextButton(
                   onPressed: () async {
-                    PairedDevice pairedDevice = await FlutterBt.connect(
+                    final device = await FlutterBt.connect(
                         new DeviceAttributes(nameRegex: "WePlenish.*"));
+
                     setState(() {
-                      _pairedDevice =
-                          pairedDevice != null ? pairedDevice.name : "2";
+                      pairedDevice = device;
+                      _lastResult = pairedDevice != null
+                          ? pairedDevice.name
+                          : "Still N/A";
                     });
                   },
-                  child: Text('Check For BT Device'))
+                  child: Text('Check For BT Device')),
+              TextButton(
+                  onPressed: () async {
+                    final uuids = await pairedDevice.uuids;
+                    setState(() {
+                      _lastResult = uuids.first;
+                    });
+                  },
+                  child: Text('Get UUIDS'))
             ],
           ),
         ),

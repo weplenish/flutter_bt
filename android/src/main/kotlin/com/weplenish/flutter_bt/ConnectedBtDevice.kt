@@ -20,11 +20,11 @@ class ConnectedBtDevice(private val device: BluetoothDevice, private val binaryM
         bluetoothAdapter?.bondedDevices?.firstOrNull { it.address == device.address }
     }
 
-    private val methodChannel: MethodChannel = MethodChannel(binaryMessenger, device.address)
-    private val eventChannel: EventChannel = EventChannel(binaryMessenger, "event.${device.address}")
+    private val methodChannel: MethodChannel = MethodChannel(binaryMessenger, "com.weplenish.flutter_bt.${device.address}")
+    private val eventChannel: EventChannel = EventChannel(binaryMessenger, "com.weplenish.flutter_bt.event.${device.address}")
 
     companion object {
-        const val GET_DEVICE_INFO = "GET_DEVICE_INFO"
+        const val GET_UUIDS = "GET_UUIDS"
         const val DEVICE_INFO = "DEVICE_INFO"
 
         // Device Map Attributes
@@ -60,10 +60,8 @@ class ConnectedBtDevice(private val device: BluetoothDevice, private val binaryM
     @RequiresApi(Build.VERSION_CODES.JELLY_BEAN_MR2)
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
         when(call.method){
-            GET_DEVICE_INFO -> {
-                Handler(Looper.getMainLooper()).post {
-                    methodChannel.invokeMethod(DEVICE_INFO, deviceToMap(pairedDevice))
-                }
+            GET_UUIDS -> {
+                result.success(pairedDevice?.uuids?.map { uuidParcel -> uuidParcel.uuid.toString() })
             }
             else -> {
                 result.notImplemented()

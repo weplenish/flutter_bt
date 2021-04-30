@@ -140,7 +140,7 @@ class FlutterBtPlugin : FlutterPlugin, MethodCallHandler, ActivityAware, PluginR
                         if(uuid != null){
                             setScanFilter(android.bluetooth.le.ScanFilter.Builder().apply {
                                 setServiceUuid(ParcelUuid(UUID.fromString(uuid)), null)
-                            })
+                            }.build())
                         }
                     }.build()
                     connectToDevice(singleDevice, deviceFilter, SELECT_BLE_REQUEST_CODE)
@@ -156,7 +156,7 @@ class FlutterBtPlugin : FlutterPlugin, MethodCallHandler, ActivityAware, PluginR
     }
 
     @RequiresApi(Build.VERSION_CODES.O)
-    fun connectToDevice(singleDevice: Boolean?, deviceFilter: DeviceFilter, requestCode: Int) {
+    fun connectToDevice(singleDevice: Boolean?, deviceFilter: DeviceFilter<*>, requestCode: Int) {
         val pairingRequest: AssociationRequest = AssociationRequest.Builder()
                 .addDeviceFilter(deviceFilter)
                 .setSingleDevice(singleDevice ?: true)
@@ -193,8 +193,8 @@ class FlutterBtPlugin : FlutterPlugin, MethodCallHandler, ActivityAware, PluginR
                         it.fetchUuidsWithSdp()
 
                         Handler(Looper.getMainLooper()).post {
-                            connectedDevices.plus(ConnectedBtDevice(pairedDevice, binaryMessenger))
-                            methodChannel.invokeMethod(DEVICE_PAIRED, ConnectedBtDevice.deviceToMap(pairedDevice))
+                            connectedDevices.plus(ConnectedBtDevice(it, binaryMessenger))
+                            methodChannel.invokeMethod(DEVICE_PAIRED, ConnectedBtDevice.deviceToMap(it))
                         }
                     }
                     return true
@@ -214,8 +214,8 @@ class FlutterBtPlugin : FlutterPlugin, MethodCallHandler, ActivityAware, PluginR
                         it.fetchUuidsWithSdp()
 
                         Handler(Looper.getMainLooper()).post {
-                            connectedDevices.plus(ConnectedBtDevice(pairedDevice, binaryMessenger))
-                            methodChannel.invokeMethod(DEVICE_PAIRED, ConnectedBtDevice.deviceToMap(pairedDevice))
+                            connectedDevices.plus(ConnectedBtDevice(it, binaryMessenger))
+                            methodChannel.invokeMethod(DEVICE_PAIRED, ConnectedBtDevice.deviceToMap(it))
                         }
                     }
                     return true

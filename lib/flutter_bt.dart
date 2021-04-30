@@ -86,30 +86,37 @@ class DeviceAttributes {
 class PairedDevice {
   final String address;
   final String name;
-  final List<String> uuids;
+  List<String> _uuids;
   final int bondState;
   final int type;
   final BluetoothClass bluetoothClass;
   final MethodChannel _channel;
   final EventChannel _eventChannel;
 
-  PairedDevice(this._channel, this._eventChannel,
+  Future<List<String>> get uuids async {
+    if (_uuids != null) {
+      return _uuids;
+    }
+    _uuids = await this._channel.invokeMethod("GET_UUIDS");
+    return _uuids;
+  }
+
+  PairedDevice(this._channel, this._eventChannel, this._uuids,
       {this.address,
       this.name,
-      this.uuids,
       this.bondState,
       this.type,
       this.bluetoothClass});
 
   factory PairedDevice.fromMap(Map<String, dynamic> map) {
     final address = map['address'].toString();
-    final channel = MethodChannel(address);
-    final eventChannel = EventChannel("event.$address");
+    final channel = MethodChannel("com.weplenish.flutter_bt.$address");
+    final eventChannel =
+        EventChannel("com.weplenish.flutter_bt.event.$address");
 
-    return PairedDevice(channel, eventChannel,
+    return PairedDevice(channel, eventChannel, map['uuids'],
         address: address,
         name: map['name'],
-        uuids: map['uuids'],
         bondState: map['bondState'],
         type: map['type'],
         bluetoothClass: BluetoothClass.fromMap(
