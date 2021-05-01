@@ -22,7 +22,7 @@ class FlutterBt {
 
       switch (call.method) {
         case PairDeviceResponse.devicePaired:
-          final device = PairedDevice.fromMap(
+          final device = PairedDevice.fromMap(_channel, _eventChannel,
               new Map<String, dynamic>.from(call.arguments));
           completer.complete(device);
           break;
@@ -86,41 +86,97 @@ class DeviceAttributes {
 class PairedDevice {
   final String address;
   final String name;
-  List<String> _uuids;
   final int bondState;
   final int type;
   final BluetoothClass bluetoothClass;
+  List<BluetoothSocket> _sockets;
   final MethodChannel _channel;
   final EventChannel _eventChannel;
 
-  Future<List<String>> get uuids async {
-    if (_uuids != null) {
-      return _uuids;
+  /// gets a socket for this device matching [uuid]
+  BluetoothSocket getSocket(String uuid) {
+    if (_sockets == null) {
+      _sockets = List.empty();
     }
-    _uuids = await this._channel.invokeMethod("GET_UUIDS");
-    return _uuids;
+
+    final socket =
+        _sockets.firstWhere((element) => element.uuid == uuid, orElse: () {
+      final newSocket = BluetoothSocket(uuid, address, _channel, _eventChannel);
+      _sockets.add(newSocket);
+      return newSocket;
+    });
+
+    return socket;
   }
 
-  PairedDevice(this._channel, this._eventChannel, this._uuids,
+  /// returns connected [sockets]
+  Future<List<BluetoothSocket>> get sockets async {
+    if (_sockets != null) {
+      return _sockets;
+    }
+    final uuids = await this
+        ._channel
+        .invokeListMethod<String>("GET_UUIDS", {"address": address});
+
+    if (uuids == null) {
+      return null;
+    }
+
+    _sockets =
+        uuids.map((e) => BluetoothSocket(e, address, _channel, _eventChannel));
+    return _sockets;
+  }
+
+  PairedDevice(this._sockets, this._channel, this._eventChannel,
       {this.address,
       this.name,
       this.bondState,
       this.type,
       this.bluetoothClass});
 
-  factory PairedDevice.fromMap(Map<String, dynamic> map) {
-    final address = map['address'].toString();
-    final channel = MethodChannel("com.weplenish.flutter_bt.$address");
-    final eventChannel =
-        EventChannel("com.weplenish.flutter_bt.event.$address");
+  /// converts [map] from platform channel to a device object
+  factory PairedDevice.fromMap(MethodChannel methodChannel,
+      EventChannel eChannel, Map<String, dynamic> map) {
+    final address = map['address'];
+    final platformUuids = map['uuids'];
+    final uuids = platformUuids == null
+        ? null
+        : platformUuids
+            .map((e) => BluetoothSocket(e, address, methodChannel, eChannel));
 
-    return PairedDevice(channel, eventChannel, map['uuids'],
+    return PairedDevice(uuids, methodChannel, eChannel,
         address: address,
         name: map['name'],
         bondState: map['bondState'],
         type: map['type'],
         bluetoothClass: BluetoothClass.fromMap(
             new Map<String, int>.from(map['bluetoothClass'])));
+  }
+}
+
+class BluetoothSocket {
+  final String uuid;
+  final MethodChannel _methodChannel;
+  final EventChannel _eventChannel;
+  final String _deviceAddress;
+  Stream<dynamic> _readStream;
+
+  BluetoothSocket(
+      this.uuid, this._deviceAddress, this._methodChannel, this._eventChannel);
+
+  Stream<dynamic> get listen {
+    if (_readStream != null) {
+      return _readStream;
+    }
+    _readStream = _eventChannel
+        .receiveBroadcastStream({"address": _deviceAddress, "uuid": uuid});
+
+    return _readStream;
+  }
+
+  Future write(String message) async {
+    return await _methodChannel.invokeMethod("writeToSocket",
+        {"address": _deviceAddress, "uuid": uuid, "message": message});
   }
 }
 

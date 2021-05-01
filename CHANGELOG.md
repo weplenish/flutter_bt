@@ -1,3 +1,9 @@
+## 0.0.3
+
+* added initial work for listening to sockets in bluetooth
+* added initial work for writing to sockets in bluetooth
+* fixed uuid android query though SDP doesn't seem to return much
+
 ## 0.0.2
 
 * fixes for compilation

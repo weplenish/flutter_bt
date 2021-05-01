@@ -3,6 +3,7 @@ package com.weplenish.flutter_bt
 import android.app.Activity
 import android.app.Activity.RESULT_OK
 import android.app.Activity.RESULT_CANCELED
+import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
 import android.companion.AssociationRequest
 import android.companion.DeviceFilter
@@ -46,7 +47,6 @@ class FlutterBtPlugin : FlutterPlugin, MethodCallHandler, ActivityAware, PluginR
     private lateinit var context: Context
     private lateinit var binaryMessenger: BinaryMessenger
     private var activity: Activity? = null
-    private val connectedDevices: Set<ConnectedBtDevice> = emptySet()
 
     private val deviceManager: CompanionDeviceManager by lazy(LazyThreadSafetyMode.NONE) {
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
@@ -54,6 +54,14 @@ class FlutterBtPlugin : FlutterPlugin, MethodCallHandler, ActivityAware, PluginR
         } else {
             TODO("VERSION.SDK_INT < O")
         }
+    }
+
+    private val bluetoothAdapter: BluetoothAdapter? by lazy(LazyThreadSafetyMode.NONE) {
+        BluetoothAdapter.getDefaultAdapter()
+    }
+
+    private val pairedDevices: Set<BluetoothDevice>? by lazy(LazyThreadSafetyMode.NONE) {
+        bluetoothAdapter?.bondedDevices
     }
 
     override fun onAttachedToEngine(@NonNull flutterPluginBinding: FlutterPlugin.FlutterPluginBinding) {
@@ -121,10 +129,12 @@ class FlutterBtPlugin : FlutterPlugin, MethodCallHandler, ActivityAware, PluginR
                     connectToDevice(singleDevice, deviceFilter, SELECT_BT_REQUEST_CODE)
 
                     result.success(true)
+                    return
                 }
                 else -> {
                     result.notImplemented()
                     TODO("Add Android support pre O")
+                    return
                 }
             }
             CONNECT_BLE -> when {
@@ -145,11 +155,30 @@ class FlutterBtPlugin : FlutterPlugin, MethodCallHandler, ActivityAware, PluginR
                     }.build()
                     connectToDevice(singleDevice, deviceFilter, SELECT_BLE_REQUEST_CODE)
                     result.success(true)
+                    return
                 }
                 else -> {
                     result.notImplemented()
                     TODO("Add Android support pre O")
+                    return
                 }
+            }
+            ConnectedBtDevice.GET_UUIDS -> {
+                val address = call.argument(ConnectedBtDevice.ADDRESS) as String?
+                if(address == null){
+                    result.error("Device address is required", null, null)
+                    return
+                }
+
+                val device = pairedDevices?.firstOrNull { it.address == address }
+                if(device == null){
+                    result.error("BT device is no longer bonded.", null, null)
+                    return
+                }
+
+                val uuids = ConnectedBtDevice.deviceUuidToList(device)
+                result.success(uuids)
+                return
             }
             else -> result.notImplemented()
         }
@@ -190,10 +219,9 @@ class FlutterBtPlugin : FlutterPlugin, MethodCallHandler, ActivityAware, PluginR
                     val pairedDevice: BluetoothDevice? = data?.getParcelableExtra(CompanionDeviceManager.EXTRA_DEVICE)
                     pairedDevice?.let {
                         it.createBond()
-                        it.fetchUuidsWithSdp()
+                        //it.fetchUuidsWithSdp()
 
                         Handler(Looper.getMainLooper()).post {
-                            connectedDevices.plus(ConnectedBtDevice(it, binaryMessenger))
                             methodChannel.invokeMethod(DEVICE_PAIRED, ConnectedBtDevice.deviceToMap(it))
                         }
                     }
@@ -214,7 +242,6 @@ class FlutterBtPlugin : FlutterPlugin, MethodCallHandler, ActivityAware, PluginR
                         it.fetchUuidsWithSdp()
 
                         Handler(Looper.getMainLooper()).post {
-                            connectedDevices.plus(ConnectedBtDevice(it, binaryMessenger))
                             methodChannel.invokeMethod(DEVICE_PAIRED, ConnectedBtDevice.deviceToMap(it))
                         }
                     }
@@ -247,5 +274,37 @@ class FlutterBtPlugin : FlutterPlugin, MethodCallHandler, ActivityAware, PluginR
 
     override fun onDetachedFromActivity() {
         activity = null;
+    }
+
+    private inner class ConnectThread(device: BluetoothDevice, uuid: UUID, eventChannel: EventChannel) : Thread() {
+
+        private val mmSocket: BluetoothSocket? by lazy(LazyThreadSafetyMode.NONE) {
+            device.createRfcommSocketToServiceRecord(uuid)
+        }
+
+        public override fun run() {
+            // Cancel discovery because it otherwise slows down the connection.
+            bluetoothAdapter?.cancelDiscovery()
+
+            mmSocket?.use { socket ->
+                // Connect to the remote device through the socket. This call blocks
+                // until it succeeds or throws an exception.
+                socket.connect()
+
+                // The connection attempt succeeded. Perform work associated with
+                // the connection in a separate thread.
+                //TODO
+                //manageMyConnectedSocket(socket)
+            }
+        }
+
+        // Closes the client socket and causes the thread to finish.
+        fun cancel() {
+            try {
+                mmSocket?.close()
+            } catch (e: IOException) {
+                Log.e(TAG, "Could not close the client socket", e)
+            }
+        }
     }
 }
